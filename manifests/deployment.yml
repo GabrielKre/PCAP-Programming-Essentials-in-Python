@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: "kubernetescluster001"
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: "kubernetescluster001"
+    spec:
+      containers:
+        - name: "kubernetescluster001"
+          image: "test123gk123.azurecr.io/kubernetescluster001"
+          ports:
+          - containerPort: 80
