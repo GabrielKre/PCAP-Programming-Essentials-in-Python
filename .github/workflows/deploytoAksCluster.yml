@@ -1,0 +1,63 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: actions/checkout@master
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az acr create -n test123gk123 -g test123gk123a1e1-rg --location "East US" --sku Standard --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n test123gk123 --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n test123gk123 --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n test123gk123 --query passwords[0].value | xargs`"
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: test123gk123.azurecr.io
+        username: ${{ steps.create-acr.outputs.acr_username }}
+        password: ${{ steps.create-acr.outputs.acr_password }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/test" -f  "test" -t test123gk123.azurecr.io/kubernetescluster001:${{ github.sha }}
+        docker push test123gk123.azurecr.io/kubernetescluster001:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      id: login
+      with:
+         kubeconfig: ${{ secrets.aks_kubernetescluster001_kubeConfig }}
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep kubernetescluster0014290 | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace kubernetescluster0014290`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: kubernetescluster0014290
+        container-registry-url: test123gk123.azurecr.io
+        container-registry-username: ${{ steps.create-acr.outputs.acr_username }}
+        container-registry-password: ${{ steps.create-acr.outputs.acr_password }}
+        secret-name: kubernetescldockerauth
+       
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: kubernetescluster0014290
+        manifests: |
+          manifests/deployment.yml
+          manifests/service.yml
+        images: |
+          test123gk123.azurecr.io/kubernetescluster001:${{ github.sha }}
+        imagepullsecrets: |
+          kubernetescldockerauth
